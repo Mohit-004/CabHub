@@ -9,15 +9,19 @@ dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
+
+// Allow dynamic origins for free deployments (or specify exact URLs if known)
+const allowedOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*';
+
 const io = new Server(server, {
     cors: {
-        origin: process.env.CORS_ORIGIN,
+        origin: allowedOrigins,
         methods: ["GET", "POST"]
     }
 });
 
 // Middleware
-app.use(cors());
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 // Socket.io connection
