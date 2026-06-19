@@ -2,7 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimulation, INDIAN_LANDMARKS } from '../context/SimulationContext';
 import MapComponent from '../components/MapComponent';
-import { ArrowLeft, User, Wallet, Navigation, MapPin, Send, CheckCircle, Star, LogOut, ChevronRight, Info } from 'lucide-react';
+import RideReceipt from '../components/RideReceipt';
+import { useToast } from '../components/ToastNotification';
+import { ArrowLeft, User, Wallet, Navigation, MapPin, Send, CheckCircle, Star, LogOut, ChevronRight, Info, ShieldAlert, Receipt } from 'lucide-react';
 
 const PassengerPortal = () => {
   const navigate = useNavigate();
@@ -14,8 +16,18 @@ const PassengerPortal = () => {
     activeRide,
     rideHistory,
     requestRide,
-    cancelRide
+    cancelRide,
+    messages,
+    sendMessage,
+    sosAlert,
+    triggerSOS,
+    clearSOS
   } = useSimulation();
+  const { addToast } = useToast();
+
+  // Receipt modal state
+  const [receiptRide, setReceiptRide] = useState(null);
+  const [receiptOpen, setReceiptOpen] = useState(false);
 
   // Auth local inputs
   const [isRegistering, setIsRegistering] = useState(false);
@@ -24,6 +36,21 @@ const PassengerPortal = () => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Chat local state
+  const [chatInput, setChatInput] = useState('');
+  const passengerPresets = [
+    "I am waiting at the pickup point.",
+    "Please call me when you arrive.",
+    "I have luggage with me.",
+    "Traffic is heavy near me."
+  ];
+
+  const handleSendChat = (text) => {
+    if (!text.trim()) return;
+    sendMessage('passenger', text);
+    setChatInput('');
+  };
 
   // Booking details inputs
   const [pickupIndex, setPickupIndex] = useState(0);
@@ -67,27 +94,36 @@ const PassengerPortal = () => {
         return;
       }
       register('passenger', { name, email, password, phone });
+      addToast('Account created! Welcome to CabHub 🇮🇳', 'success');
     } else {
       if (!email || !password) {
         setErrorMsg('Please fill in all fields');
         return;
       }
       login('passenger', { email, password });
+      addToast('Welcome back to CabHub! Ready to ride 🚖', 'success');
     }
   };
 
   const handleGuestLogin = () => {
     login('passenger', { email: 'aarav@gmail.com', password: 'guestpassword' });
+    addToast('Logged in as Guest Passenger', 'info');
   };
 
   const handleBooking = () => {
     if (pickupIndex === dropIndex) {
-      alert('Pickup and drop locations cannot be the same!');
+      addToast('Pickup and drop locations cannot be the same!', 'error');
       return;
     }
     const fare = fareTiers[selectedTier];
     requestRide(pickupLandmark, dropLandmark, fare, selectedTier, rideStats.distance, rideStats.duration);
     setRatingSubmitted(false);
+    addToast(`Ride requested! Searching for ${selectedTier} cabs nearby...`, 'info');
+  };
+
+  const handleViewReceipt = (ride) => {
+    setReceiptRide(ride);
+    setReceiptOpen(true);
   };
 
   return (
@@ -97,6 +133,61 @@ const PassengerPortal = () => {
       color: 'var(--text-primary)',
       padding: '20px 12px'
     }}>
+      {/* SOS Overlay */}
+      {sosAlert && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(225, 29, 72, 0.98)',
+          color: '#fff',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '24px',
+          textAlign: 'center',
+          backdropFilter: 'blur(8px)'
+        }} className="animate-fade-in">
+          <div style={{
+            background: 'rgba(255,255,255,0.15)',
+            padding: '24px',
+            borderRadius: '50%',
+            animation: 'pulseGlow 1.5s infinite',
+            marginBottom: '24px',
+            color: '#fff'
+          }}>
+            <ShieldAlert size={64} />
+          </div>
+          <h2 style={{ fontSize: '32px', fontFamily: 'var(--font-display)', fontWeight: '800', marginBottom: '12px' }}>
+            SOS EMERGENCY TRIGGERED
+          </h2>
+          <p style={{ maxWidth: '500px', fontSize: '16px', lineHeight: '1.6', color: 'rgba(255,255,255,0.9)', marginBottom: '32px' }}>
+            operations control center, dispatch logs, and local simulated emergency responder channels (112) have been alerted with your live trip information.
+          </p>
+          <button 
+            onClick={clearSOS}
+            style={{
+              background: '#fff',
+              color: '#E11D48',
+              border: 'none',
+              padding: '12px 28px',
+              borderRadius: '12px',
+              fontFamily: 'var(--font-display)',
+              fontWeight: '700',
+              fontSize: '15px',
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+            }}
+          >
+            Cancel Emergency Alert
+          </button>
+        </div>
+      )}
+
       <div className="container-layout" style={{ maxWidth: '1000px' }}>
         {/* Top Navbar */}
         <nav style={{
@@ -556,24 +647,153 @@ const PassengerPortal = () => {
                     </div>
                   )}
 
-                  <button 
-                    onClick={cancelRide}
-                    style={{
-                      border: '1px solid #E11D48',
-                      background: 'transparent',
-                      color: '#E11D48',
-                      padding: '12px 0',
-                      borderRadius: '12px',
-                      fontFamily: 'var(--font-display)',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(225,29,72,0.06)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                  >
-                    Cancel Booking
-                  </button>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <button 
+                      onClick={cancelRide}
+                      style={{
+                        border: '1px solid #E11D48',
+                        background: 'transparent',
+                        color: '#E11D48',
+                        padding: '12px 0',
+                        borderRadius: '12px',
+                        fontFamily: 'var(--font-display)',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(225,29,72,0.06)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      Cancel Booking
+                    </button>
+                    
+                    <button 
+                      onClick={triggerSOS}
+                      style={{
+                        border: 'none',
+                        background: 'linear-gradient(135deg, #EF4444 0%, #B91C1C 100%)',
+                        color: '#FFF',
+                        padding: '12px 0',
+                        borderRadius: '12px',
+                        fontFamily: 'var(--font-display)',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        boxShadow: 'rgba(239,68,68,0.2) 0 4px 12px',
+                        animation: 'pulseGlow 2s infinite'
+                      }}
+                    >
+                      Trigger SOS
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Passenger - Pilot Chat Drawer Box */}
+              {activeRide && activeRide.status !== 'requested' && (
+                <div className="glass-card animate-fade-in" style={{ padding: '20px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <h4 style={{ fontSize: '15px', fontWeight: '700' }}>Chat with Pilot ({activeRide.driver?.name})</h4>
+                  
+                  {/* Messages container */}
+                  <div style={{
+                    background: 'var(--bg-tertiary)',
+                    borderRadius: '12px',
+                    padding: '12px',
+                    height: '180px',
+                    overflowY: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}>
+                    {messages.length === 0 ? (
+                      <span style={{ margin: 'auto', color: 'var(--text-muted)', fontSize: '12px', fontStyle: 'italic' }}>
+                        No messages yet. Send a quick preset below!
+                      </span>
+                    ) : (
+                      messages.map((msg, i) => (
+                        <div 
+                          key={msg.id || i}
+                          style={{
+                            alignSelf: msg.sender === 'passenger' ? 'flex-end' : msg.sender === 'system' ? 'center' : 'flex-start',
+                            background: msg.sender === 'passenger' ? 'var(--saffron)' : msg.sender === 'system' ? 'var(--border-color)' : 'var(--bg-secondary)',
+                            color: msg.sender === 'passenger' ? '#FFF' : 'var(--text-primary)',
+                            padding: '6px 12px',
+                            borderRadius: '12px',
+                            maxWidth: '80%',
+                            fontSize: '12px',
+                            lineHeight: '1.4',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                          }}
+                        >
+                          {msg.sender === 'system' ? (
+                            <span style={{ fontSize: '11px', fontWeight: '500', color: 'var(--text-secondary)' }}>{msg.text}</span>
+                          ) : (
+                            <>
+                              <div>{msg.text}</div>
+                              <span style={{ fontSize: '9px', opacity: 0.7, float: 'right', marginTop: '2px', marginLeft: '6px' }}>{msg.timestamp}</span>
+                            </>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Preset replies */}
+                  <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}>
+                    {passengerPresets.map((preset, i) => (
+                      <button
+                        key={i}
+                        onClick={() => handleSendChat(preset)}
+                        style={{
+                          background: 'var(--bg-tertiary)',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '16px',
+                          padding: '4px 10px',
+                          fontSize: '11px',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {preset.replace('.', '')}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Text Input Row */}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input 
+                      type="text"
+                      value={chatInput}
+                      onChange={e => setChatInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleSendChat(chatInput)}
+                      placeholder="Type a message..."
+                      style={{
+                        flexGrow: 1,
+                        padding: '8px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-color)',
+                        background: 'var(--input-bg)',
+                        color: 'var(--text-primary)',
+                        fontSize: '13px'
+                      }}
+                    />
+                    <button 
+                      onClick={() => handleSendChat(chatInput)}
+                      style={{
+                        background: 'var(--chakra)',
+                        color: '#FFF',
+                        border: 'none',
+                        borderRadius: '10px',
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <Send size={14} />
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -658,23 +878,40 @@ const PassengerPortal = () => {
                           border: '1px solid var(--border-color)',
                           borderRadius: '10px',
                           background: 'var(--bg-secondary)',
-                          fontSize: '13px'
+                          fontSize: '13px',
+                          cursor: ride.status === 'completed' ? 'pointer' : 'default',
+                          transition: 'border-color 0.2s'
                         }}
+                        onClick={() => ride.status === 'completed' && handleViewReceipt(ride)}
+                        onMouseEnter={e => { if (ride.status === 'completed') e.currentTarget.style.borderColor = 'var(--saffron)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-color)'; }}
                       >
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           <span style={{ fontWeight: '600' }}>{ride.pickup.name.split(',')[0]} &rarr; {ride.drop.name.split(',')[0]}</span>
                           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{new Date(ride.createdAt).toLocaleDateString()} &bull; {ride.vehicleType}</span>
                         </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontWeight: '700', color: ride.status === 'cancelled' ? '#E11D48' : 'var(--emerald)' }}>
-                            {ride.status === 'cancelled' ? 'Cancelled' : `₹${ride.fare}`}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontWeight: '700', color: ride.status === 'cancelled' ? '#E11D48' : 'var(--emerald)' }}>
+                              {ride.status === 'cancelled' ? 'Cancelled' : `₹${ride.fare}`}
+                            </div>
                           </div>
+                          {ride.status === 'completed' && (
+                            <Receipt size={14} color="var(--text-muted)" />
+                          )}
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
+
+              {/* Ride Receipt Modal */}
+              <RideReceipt
+                ride={receiptRide}
+                isOpen={receiptOpen}
+                onClose={() => setReceiptOpen(false)}
+              />
             </div>
           </div>
         )}
