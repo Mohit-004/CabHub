@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimulation } from '../context/SimulationContext';
 import MapComponent from '../components/MapComponent';
+import { useToast } from '../components/ToastNotification';
 import { ArrowLeft, User, Wallet, Navigation, MapPin, Check, X, LogOut, ShieldAlert, Star } from 'lucide-react';
 
 const DriverPortal = () => {
@@ -16,8 +17,14 @@ const DriverPortal = () => {
     acceptRideByDriver,
     updateRideStatus,
     cancelRide,
-    toggleDriverDuty
+    toggleDriverDuty,
+    messages,
+    sendMessage,
+    sosAlert,
+    triggerSOS,
+    clearSOS
   } = useSimulation();
+  const { addToast } = useToast();
 
   // Auth local inputs
   const [isRegistering, setIsRegistering] = useState(false);
@@ -29,6 +36,37 @@ const DriverPortal = () => {
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [vehicleType, setVehicleType] = useState('Sedan');
   const [errorMsg, setErrorMsg] = useState('');
+  
+  // OTP states
+  const [otpInput, setOtpInput] = useState('');
+  const [otpError, setOtpError] = useState(false);
+
+  // Chat local state
+  const [chatInput, setChatInput] = useState('');
+  const driverPresets = [
+    "I have arrived at your location.",
+    "Stuck in traffic. Reaching in 3 mins.",
+    "Please share your trip OTP code.",
+    "I am on my way."
+  ];
+
+  const handleSendChat = (text) => {
+    if (!text.trim()) return;
+    sendMessage('driver', text);
+    setChatInput('');
+  };
+
+  const handleStartRide = () => {
+    if (otpInput === '7241') {
+      updateRideStatus('started');
+      setOtpInput('');
+      setOtpError(false);
+      addToast('OTP verified! Ride started. Drive safe! 🚗', 'success');
+    } else {
+      setOtpError(true);
+      addToast('Invalid OTP. Please verify with the customer.', 'error');
+    }
+  };
 
   // Auth handlers
   const handleAuthSubmit = (e) => {
@@ -51,11 +89,13 @@ const DriverPortal = () => {
 
   const handleGuestLogin = () => {
     login('driver', { email: 'rajesh@bharatnav.in', password: 'guestpassword' });
+    addToast('Welcome back, Pilot! Ready for dispatch.', 'success');
   };
 
   const handleAcceptRide = () => {
     if (!driver) return;
     acceptRideByDriver(driver);
+    addToast('Ride accepted! Navigating to pickup location...', 'success');
   };
 
   // Get driver trip history count
@@ -68,6 +108,61 @@ const DriverPortal = () => {
       color: 'var(--text-primary)',
       padding: '20px 12px'
     }}>
+      {/* SOS Overlay */}
+      {sosAlert && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(225, 29, 72, 0.98)',
+          color: '#fff',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '24px',
+          textAlign: 'center',
+          backdropFilter: 'blur(8px)'
+        }} className="animate-fade-in">
+          <div style={{
+            background: 'rgba(255,255,255,0.15)',
+            padding: '24px',
+            borderRadius: '50%',
+            animation: 'pulseGlow 1.5s infinite',
+            marginBottom: '24px',
+            color: '#fff'
+          }}>
+            <ShieldAlert size={64} />
+          </div>
+          <h2 style={{ fontSize: '32px', fontFamily: 'var(--font-display)', fontWeight: '800', marginBottom: '12px' }}>
+            SOS EMERGENCY TRIGGERED
+          </h2>
+          <p style={{ maxWidth: '500px', fontSize: '16px', lineHeight: '1.6', color: 'rgba(255,255,255,0.9)', marginBottom: '32px' }}>
+            The active operations dispatcher, admin console, and simulated law enforcement (112 emergency) have been patched into your vehicle GPS stream.
+          </p>
+          <button 
+            onClick={clearSOS}
+            style={{
+              background: '#fff',
+              color: '#E11D48',
+              border: 'none',
+              padding: '12px 28px',
+              borderRadius: '12px',
+              fontFamily: 'var(--font-display)',
+              fontWeight: '700',
+              fontSize: '15px',
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+            }}
+          >
+            Acknowledge Emergency
+          </button>
+        </div>
+      )}
+
       <div className="container-layout" style={{ maxWidth: '1000px' }}>
         {/* Top Navbar */}
         <nav style={{
@@ -581,13 +676,47 @@ const DriverPortal = () => {
                       {/* Dynamic step actions */}
                       <div>
                         {activeRide.status === 'arrived' && (
-                          <button 
-                            onClick={() => updateRideStatus('started')}
-                            className="glow-btn-saffron"
-                            style={{ width: '100%', padding: '14px 0', fontSize: '15px' }}
-                          >
-                            Start Ride (OTP Verified)
-                          </button>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                                ENTER CUSTOMER OTP (Check Passenger Screen)
+                              </label>
+                              <input 
+                                type="text"
+                                maxLength={4}
+                                value={otpInput}
+                                onChange={e => {
+                                  setOtpInput(e.target.value);
+                                  setOtpError(false);
+                                }}
+                                placeholder="e.g. 7241"
+                                style={{
+                                  width: '100%',
+                                  padding: '10px 14px',
+                                  borderRadius: '10px',
+                                  border: otpError ? '1.5px solid #E11D48' : '1px solid var(--border-color)',
+                                  background: 'var(--input-bg)',
+                                  color: 'var(--text-primary)',
+                                  fontSize: '14px',
+                                  textAlign: 'center',
+                                  fontWeight: '800',
+                                  letterSpacing: '0.2em'
+                                }}
+                              />
+                            </div>
+                            {otpError && (
+                              <div style={{ color: '#E11D48', fontSize: '11px', fontWeight: '600', textAlign: 'center' }}>
+                                Invalid OTP code! Verify with customer. (Hint: 7241)
+                              </div>
+                            )}
+                            <button 
+                              onClick={handleStartRide}
+                              className="glow-btn-saffron"
+                              style={{ width: '100%', padding: '12px 0', fontSize: '15px' }}
+                            >
+                              Verify OTP & Start Ride
+                            </button>
+                          </div>
                         )}
                         {(activeRide.status === 'accepted' || activeRide.status === 'arriving') && (
                           <button 
@@ -615,6 +744,137 @@ const DriverPortal = () => {
                             Complete Ride & Collect ₹{activeRide.fare}
                           </button>
                         )}
+                        {/* Emergency SOS button inside trip console */}
+                        {activeRide.status === 'started' && (
+                          <button 
+                            onClick={triggerSOS}
+                            style={{
+                              border: 'none',
+                              background: 'linear-gradient(135deg, #EF4444 0%, #B91C1C 100%)',
+                              color: '#FFF',
+                              padding: '12px 0',
+                              borderRadius: '12px',
+                              fontFamily: 'var(--font-display)',
+                              fontWeight: '700',
+                              fontSize: '15px',
+                              cursor: 'pointer',
+                              marginTop: '12px',
+                              boxShadow: 'rgba(239,68,68,0.2) 0 4px 12px',
+                              animation: 'pulseGlow 2s infinite'
+                            }}
+                          >
+                            Trigger Emergency SOS
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Driver - Passenger Chat Console */}
+                  {activeRide && activeRide.status !== 'requested' && (
+                    <div className="glass-card animate-fade-in" style={{ padding: '20px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      <h4 style={{ fontSize: '15px', fontWeight: '700' }}>Chat with Passenger ({activeRide.passenger?.name})</h4>
+                      
+                      {/* Messages container */}
+                      <div style={{
+                        background: 'var(--bg-tertiary)',
+                        borderRadius: '12px',
+                        padding: '12px',
+                        height: '180px',
+                        overflowY: 'auto',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                      }}>
+                        {messages.length === 0 ? (
+                          <span style={{ margin: 'auto', color: 'var(--text-muted)', fontSize: '12px', fontStyle: 'italic' }}>
+                            No messages yet. Send a quick preset below!
+                          </span>
+                        ) : (
+                          messages.map((msg, i) => (
+                            <div 
+                              key={msg.id || i}
+                              style={{
+                                alignSelf: msg.sender === 'driver' ? 'flex-end' : msg.sender === 'system' ? 'center' : 'flex-start',
+                                background: msg.sender === 'driver' ? 'var(--emerald)' : msg.sender === 'system' ? 'var(--border-color)' : 'var(--bg-secondary)',
+                                color: msg.sender === 'driver' ? '#FFF' : 'var(--text-primary)',
+                                padding: '6px 12px',
+                                borderRadius: '12px',
+                                maxWidth: '80%',
+                                fontSize: '12px',
+                                lineHeight: '1.4',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                              }}
+                            >
+                              {msg.sender === 'system' ? (
+                                <span style={{ fontSize: '11px', fontWeight: '500', color: 'var(--text-secondary)' }}>{msg.text}</span>
+                              ) : (
+                                <>
+                                  <div>{msg.text}</div>
+                                  <span style={{ fontSize: '9px', opacity: 0.7, float: 'right', marginTop: '2px', marginLeft: '6px' }}>{msg.timestamp}</span>
+                                </>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {/* Preset replies */}
+                      <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}>
+                        {driverPresets.map((preset, i) => (
+                          <button
+                            key={i}
+                            onClick={() => handleSendChat(preset)}
+                            style={{
+                              background: 'var(--bg-tertiary)',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: '16px',
+                              padding: '4px 10px',
+                              fontSize: '11px',
+                              color: 'var(--text-secondary)',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {preset.replace('.', '')}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Text Input Row */}
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input 
+                          type="text"
+                          value={chatInput}
+                          onChange={e => setChatInput(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && handleSendChat(chatInput)}
+                          placeholder="Type message for customer..."
+                          style={{
+                            flexGrow: 1,
+                            padding: '8px 12px',
+                            borderRadius: '10px',
+                            border: '1px solid var(--border-color)',
+                            background: 'var(--input-bg)',
+                            color: 'var(--text-primary)',
+                            fontSize: '13px'
+                          }}
+                        />
+                        <button 
+                          onClick={() => handleSendChat(chatInput)}
+                          style={{
+                            background: 'var(--chakra)',
+                            color: '#FFF',
+                            border: 'none',
+                            borderRadius: '10px',
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                        </button>
                       </div>
                     </div>
                   )}
