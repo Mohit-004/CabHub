@@ -17,6 +17,12 @@ export const INDIAN_LANDMARKS = [
   { name: 'Chhatrapati Shivaji Terminus, Mumbai', lat: 18.9400, lng: 72.8353 }
 ];
 
+export const PREDEFINED_PROMOS = [
+  { code: 'CABHUB50', discountType: 'fixed', value: 50, desc: '₹50 flat off on your ride' },
+  { code: 'WELCOME10', discountType: 'percent', value: 10, maxDiscount: 40, desc: '10% off up to ₹40' },
+  { code: 'BUMPER20', discountType: 'percent', value: 20, maxDiscount: 80, desc: '20% off up to ₹80' }
+];
+
 export const SimulationProvider = ({ children }) => {
   // Theme state
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
@@ -202,10 +208,30 @@ export const SimulationProvider = ({ children }) => {
     setSosAlert(false);
   };
 
+  // Wallet operations
+  const rechargeWallet = (amount) => {
+    if (!passenger) return { success: false, message: 'Please log in as passenger first' };
+    const numAmt = parseFloat(amount);
+    if (isNaN(numAmt) || numAmt <= 0) return { success: false, message: 'Invalid recharge amount' };
+    
+    let updated;
+    setPassenger(prev => {
+      if (!prev) return null;
+      const newBalance = prev.walletBalance + numAmt;
+      updated = { ...prev, walletBalance: newBalance };
+      localStorage.setItem('cabhub_passenger', JSON.stringify(updated));
+      return updated;
+    });
+    return { success: true };
+  };
+
   // Ride Operations
-  const requestRide = (pickup, drop, fare, vehicleType, distance, duration) => {
+  const requestRide = (pickup, drop, fare, vehicleType, distance, duration, discount = 0, promoCode = '') => {
     if (!passenger) return { success: false, message: 'Please log in as passenger first' };
     
+    const originalFare = parseFloat(fare);
+    const finalFare = Math.max(0, originalFare - discount);
+
     const newRide = {
       id: 'ride_' + Math.random().toString(36).substring(2, 9),
       passenger: {
@@ -223,7 +249,10 @@ export const SimulationProvider = ({ children }) => {
         lat: drop.lat,
         lng: drop.lng
       },
-      fare: parseFloat(fare),
+      originalFare,
+      fare: finalFare,
+      discount,
+      promoCode,
       vehicleType,
       distance,
       duration,
@@ -295,11 +324,11 @@ export const SimulationProvider = ({ children }) => {
         }));
       }
 
-      // Update driver earnings
+      // Update driver earnings (credit full original fare as subsidy)
       if (driver && activeRide.driver && activeRide.driver.id === driver.id) {
         setDriver(prev => ({
           ...prev,
-          earnings: prev.earnings + activeRide.fare,
+          earnings: prev.earnings + (activeRide.originalFare || activeRide.fare),
           status: 'active'
         }));
       }
@@ -448,6 +477,7 @@ export const SimulationProvider = ({ children }) => {
         login,
         register,
         logout,
+        rechargeWallet,
         requestRide,
         acceptRideByDriver,
         updateRideStatus,
