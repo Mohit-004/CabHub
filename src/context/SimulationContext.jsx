@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { playRequestChime, startIncomingRequestRing, stopIncomingRequestRing, playSuccessChime, playSirenSound } from '../utils/audio';
 
 const SimulationContext = createContext(null);
 
@@ -43,6 +44,10 @@ export const SimulationProvider = ({ children }) => {
     const saved = localStorage.getItem('cabhub_ride_history');
     return saved ? JSON.parse(saved) : [];
   });
+
+  // Chat and SOS Simulation States
+  const [messages, setMessages] = useState([]);
+  const [sosAlert, setSosAlert] = useState(false);
 
   // Available drivers online (for simulator visual)
   const [onlineDrivers, setOnlineDrivers] = useState([
@@ -174,6 +179,29 @@ export const SimulationProvider = ({ children }) => {
     if (role === 'admin') setAdmin(null);
   };
 
+  // Chat messaging actions
+  const sendMessage = (sender, text) => {
+    setMessages(prev => [
+      ...prev,
+      {
+        id: 'msg_' + Math.random().toString(36).substring(2, 9),
+        sender,
+        text,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }
+    ]);
+  };
+
+  // SOS Emergency actions
+  const triggerSOS = () => {
+    setSosAlert(true);
+    playSirenSound();
+  };
+
+  const clearSOS = () => {
+    setSosAlert(false);
+  };
+
   // Ride Operations
   const requestRide = (pickup, drop, fare, vehicleType, distance, duration) => {
     if (!passenger) return { success: false, message: 'Please log in as passenger first' };
@@ -207,6 +235,13 @@ export const SimulationProvider = ({ children }) => {
     };
 
     setActiveRide(newRide);
+    setMessages([]); // reset chat logs for new trip
+    setSosAlert(false);
+
+    // Audio cues
+    playRequestChime();
+    startIncomingRequestRing();
+
     return { success: true, ride: newRide };
   };
 
@@ -226,11 +261,15 @@ export const SimulationProvider = ({ children }) => {
     };
 
     setActiveRide(updatedRide);
+    stopIncomingRequestRing(); // Stop ringer
     
     // Update driver state
     if (driver && driver.id === driverProfile.id) {
       setDriver(prev => ({ ...prev, status: 'on-ride' }));
     }
+
+    // Insert automatic system text in chat
+    sendMessage('system', `Pilot ${driverProfile.name} is on the way!`);
 
     return { success: true, ride: updatedRide };
   };
@@ -242,6 +281,7 @@ export const SimulationProvider = ({ children }) => {
 
     if (newStatus === 'started') {
       updatedRide.startTime = new Date().toISOString();
+      sendMessage('system', `Ride started. OTP verified. Drive safe!`);
     }
 
     if (newStatus === 'completed') {
@@ -267,6 +307,11 @@ export const SimulationProvider = ({ children }) => {
       // Add to history
       setRideHistory(prev => [updatedRide, ...prev]);
       setActiveRide(null);
+      setMessages([]);
+      setSosAlert(false);
+
+      // Play success arpeggio
+      playSuccessChime();
     } else {
       setActiveRide(updatedRide);
     }
@@ -285,6 +330,9 @@ export const SimulationProvider = ({ children }) => {
 
     setRideHistory(prev => [cancelledRide, ...prev]);
     setActiveRide(null);
+    setMessages([]);
+    setSosAlert(false);
+    stopIncomingRequestRing();
 
     if (driver && activeRide.driver && activeRide.driver.id === driver.id) {
       setDriver(prev => ({ ...prev, status: 'active' }));
@@ -325,7 +373,7 @@ export const SimulationProvider = ({ children }) => {
             return { ...prev, status: 'arrived', driverLat: targetLat, driverLng: targetLng };
           }
           
-          // Move 10% closer each second
+          // Move 15% closer each second
           return {
             ...prev,
             status: 'arriving',
@@ -354,7 +402,7 @@ export const SimulationProvider = ({ children }) => {
             return { ...prev, driverLat: targetLat, driverLng: targetLng };
           }
           
-          // Move 8% closer to dropoff each second
+          // Move 10% closer to dropoff each second
           return {
             ...prev,
             driverLat: prev.driverLat + dLat * 0.10,
@@ -374,6 +422,9 @@ export const SimulationProvider = ({ children }) => {
     setAdmin(null);
     setActiveRide(null);
     setRideHistory([]);
+    setMessages([]);
+    setSosAlert(false);
+    stopIncomingRequestRing();
     localStorage.clear();
     setTheme('light');
   };
@@ -389,6 +440,11 @@ export const SimulationProvider = ({ children }) => {
         activeRide,
         rideHistory,
         onlineDrivers,
+        messages,
+        sendMessage,
+        sosAlert,
+        triggerSOS,
+        clearSOS,
         login,
         register,
         logout,
