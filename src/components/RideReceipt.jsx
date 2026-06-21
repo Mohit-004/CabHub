@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, MapPin, Clock, Route, Car, User, Star, Download, IndianRupee, Receipt, Shield } from 'lucide-react';
+import { X, MapPin, Clock, Route, Car, User, Star, Download, IndianRupee, Receipt, Shield, Tag } from 'lucide-react';
 
 const RideReceipt = ({ ride, isOpen, onClose }) => {
   const receiptRef = useRef(null);
@@ -19,11 +19,14 @@ const RideReceipt = ({ ride, isOpen, onClose }) => {
     minute: '2-digit'
   });
 
-  // Fare breakdown simulation
-  const baseFare = Math.round(ride.fare * 0.25);
-  const distanceCharge = Math.round(ride.fare * 0.55);
-  const platformFee = Math.round(ride.fare * 0.08);
-  const gst = Math.round(ride.fare * 0.12);
+  // Fare breakdown simulation using original fare
+  const original = ride.originalFare || ride.fare;
+  const discount = ride.discount || 0;
+  
+  const baseFare = Math.round(original * 0.25);
+  const distanceCharge = Math.round(original * 0.55);
+  const platformFee = Math.round(original * 0.08);
+  const gst = Math.round(original * 0.12);
   const total = ride.fare;
 
   return (
@@ -304,6 +307,16 @@ const RideReceipt = ({ ride, isOpen, onClose }) => {
                   <span style={{ color: 'var(--text-secondary)' }}>GST (18%)</span>
                   <span style={{ fontWeight: '600' }}>₹{gst}</span>
                 </div>
+
+                {discount > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--emerald)' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Tag size={12} color="var(--emerald)" />
+                      <span>Promo Discount ({ride.promoCode})</span>
+                    </span>
+                    <span style={{ fontWeight: '700' }}>-₹{discount}</span>
+                  </div>
+                )}
 
                 {/* Divider */}
                 <div style={{

@@ -49,12 +49,14 @@ const AdminPortal = () => {
     const completedRides = rideHistory.filter(r => r.status === 'completed');
     const revenue = completedRides.reduce((sum, r) => sum + r.fare, 0);
     const cancelled = rideHistory.filter(r => r.status === 'cancelled').length;
+    const totalDiscounts = completedRides.reduce((sum, r) => sum + (r.discount || 0), 0);
     
     return {
       revenue,
       completedCount: completedRides.length,
       activeCount: activeRide ? 1 : 0,
-      cancelledCount: cancelled
+      cancelledCount: cancelled,
+      totalDiscounts
     };
   }, [rideHistory, activeRide]);
 
@@ -66,9 +68,10 @@ const AdminPortal = () => {
     rideHistory.forEach((ride, i) => {
       const timeStr = new Date(ride.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       if (ride.status === 'completed') {
+        const promoText = ride.promoCode ? ` (Promo ${ride.promoCode} applied: -₹${ride.discount})` : '';
         logs.push({
           time: timeStr,
-          text: `Trip ${ride.id} completed. ₹${ride.fare} paid to pilot ${ride.driver?.name || 'Driver'}.`,
+          text: `Trip ${ride.id} completed. ₹${ride.fare} paid by passenger${promoText}. Pilot earnings credited: ₹${ride.originalFare || ride.fare}.`,
           type: 'success'
         });
       } else if (ride.status === 'cancelled') {
@@ -323,6 +326,17 @@ const AdminPortal = () => {
                 <div>
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>ONLINE PILOTS</span>
                   <h3 style={{ fontSize: '24px', fontWeight: '800' }}>{onlineDrivers.length}</h3>
+                </div>
+              </div>
+
+              {/* Stat Card 5 (Platform Subsidies) */}
+              <div className="glass-card" style={{ padding: '20px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(239,68,68,0.1)', color: '#EF4444' }}>
+                  <TrendingUp size={24} style={{ transform: 'rotate(180deg)' }} />
+                </div>
+                <div>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>PLATFORM SUBSIDIES</span>
+                  <h3 style={{ fontSize: '24px', fontWeight: '800' }}>₹{stats.totalDiscounts}</h3>
                 </div>
               </div>
             </div>
