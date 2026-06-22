@@ -10,6 +10,7 @@ import DriverPortal from './pages/DriverPortal';
 import AdminPortal from './pages/AdminPortal';
 import NotFound from './pages/NotFound';
 
+
 function App() {
   const [isLoading, setIsLoading] = useState(true);
 
