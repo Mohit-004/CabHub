@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useSimulation, INDIAN_LANDMARKS, PREDEFINED_PROMOS } from '../context/SimulationContext';
 import MapComponent from '../components/MapComponent';
 import RideReceipt from '../components/RideReceipt';
+import RatingModal from '../components/RatingModal';
+import NotificationCenter from '../components/NotificationCenter';
 import { useToast } from '../components/ToastNotification';
 import { ArrowLeft, User, Wallet, Navigation, MapPin, Send, CheckCircle, Star, LogOut, ChevronRight, Info, ShieldAlert, Receipt, Tag } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -61,6 +63,8 @@ const PassengerPortal = () => {
   const [selectedTier, setSelectedTier] = useState('Sedan');
   const [ratingVal, setRatingVal] = useState(5);
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
+  const [ratingModalOpen, setRatingModalOpen] = useState(false);
+  const [ratingTargetRide, setRatingTargetRide] = useState(null);
 
   // Wallet Recharge Modal local state
   const [rechargeModalOpen, setRechargeModalOpen] = useState(false);
@@ -269,7 +273,9 @@ const PassengerPortal = () => {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: '24px'
+          marginBottom: '24px',
+          gap: '12px',
+          flexWrap: 'wrap',
         }}>
           <button 
             onClick={() => navigate('/')}
@@ -286,32 +292,59 @@ const PassengerPortal = () => {
             }}
           >
             <ArrowLeft size={18} />
-            <span>Portals</span>
+            <span>Back</span>
           </button>
           
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: '800' }}>
             CabHub <span style={{ color: '#FF9933' }}>Passenger</span>
           </h2>
 
-          {passenger && (
-            <button 
-              onClick={() => logout('passenger')}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                color: '#E11D48',
-                fontSize: '14px',
-                fontWeight: '600'
-              }}
-            >
-              <LogOut size={16} />
-              <span>Logout</span>
-            </button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {passenger && <NotificationCenter />}
+            {passenger && (
+              <button
+                onClick={() => navigate('/profile')}
+                title="My Profile"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255,153,51,0.15) 0%, rgba(255,85,0,0.1) 100%)',
+                  border: '1px solid rgba(255,153,51,0.3)',
+                  borderRadius: '12px',
+                  padding: '8px 14px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: '#FF9933',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  fontFamily: 'var(--font-display)',
+                }}
+              >
+                <User size={15} />
+                <span style={{ maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {passenger.name.split(' ')[0]}
+                </span>
+              </button>
+            )}
+            {passenger && (
+              <button 
+                onClick={() => { logout('passenger'); navigate('/'); }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: '#E11D48',
+                  fontSize: '14px',
+                  fontWeight: '600'
+                }}
+              >
+                <LogOut size={16} />
+              </button>
+            )}
+          </div>
         </nav>
 
         {/* Auth Mode Block */}
@@ -1077,45 +1110,39 @@ const PassengerPortal = () => {
               </div>
 
               {/* Ride feedback panel / ratings popover if last ride completed */}
-              {!activeRide && rideHistory.length > 0 && !ratingSubmitted && (
-                <div className="glass-card" style={{
+              {!activeRide && rideHistory.length > 0 && !rideHistory[0].rated && rideHistory[0].status === 'completed' && (
+                <div className="glass-card animate-fade-in" style={{
                   padding: '20px',
-                  border: '1px solid var(--border-color)',
-                  background: 'linear-gradient(135deg, var(--bg-secondary) 0%, rgba(19,136,8,0.03) 100%)',
-                  animation: 'fadeIn 0.3s ease'
+                  border: '2px solid rgba(22,163,74,0.3)',
+                  background: 'linear-gradient(135deg, var(--bg-secondary) 0%, rgba(19,136,8,0.04) 100%)',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--emerald)', marginBottom: '8px' }}>
                     <CheckCircle size={18} />
                     <h4 style={{ fontSize: '15px' }}>Ride Completed Successfully!</h4>
                   </div>
                   <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
-                    Rate your last trip with pilot <strong>{rideHistory[0].driver?.name || 'Driver'}</strong>
+                    How was your trip with <strong>{rideHistory[0].driver?.name || 'your driver'}</strong>?
                   </p>
-                  
-                  <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-                    {[1, 2, 3, 4, 5].map(star => (
-                      <button 
-                        key={`st-${star}`}
-                        onClick={() => setRatingVal(star)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                      >
-                        <Star 
-                          size={24} 
-                          fill={star <= ratingVal ? '#FFC700' : 'none'} 
-                          color={star <= ratingVal ? '#FFC700' : 'var(--text-muted)'} 
-                        />
-                      </button>
-                    ))}
-                  </div>
-
-                  <button 
-                    onClick={() => setRatingSubmitted(true)}
-                    className="glow-btn-emerald" 
-                    style={{ padding: '8px 16px', fontSize: '13px' }}
+                  <button
+                    onClick={() => {
+                      setRatingTargetRide(rideHistory[0]);
+                      setRatingModalOpen(true);
+                    }}
+                    className="glow-btn-saffron"
+                    style={{ padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
-                    Submit Feedback
+                    <Star size={14} fill="#fff" color="#fff" />
+                    Rate Your Driver
                   </button>
                 </div>
+              )}
+
+              {/* Rating Modal */}
+              {ratingModalOpen && ratingTargetRide && (
+                <RatingModal
+                  ride={ratingTargetRide}
+                  onClose={() => { setRatingModalOpen(false); setRatingTargetRide(null); }}
+                />
               )}
 
               {/* History list */}
