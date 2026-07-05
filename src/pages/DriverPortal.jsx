@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimulation } from '../context/SimulationContext';
 import MapComponent from '../components/MapComponent';
+import NotificationCenter from '../components/NotificationCenter';
 import { useToast } from '../components/ToastNotification';
 import { ArrowLeft, User, Wallet, Navigation, MapPin, Check, X, LogOut, ShieldAlert, Star } from 'lucide-react';
 
@@ -169,7 +170,9 @@ const DriverPortal = () => {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: '24px'
+          marginBottom: '24px',
+          gap: '12px',
+          flexWrap: 'wrap',
         }}>
           <button 
             onClick={() => navigate('/')}
@@ -186,32 +189,59 @@ const DriverPortal = () => {
             }}
           >
             <ArrowLeft size={18} />
-            <span>Portals</span>
+            <span>Back</span>
           </button>
           
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: '800' }}>
             CabHub <span style={{ color: 'var(--emerald)' }}>Driver (Bharat Nav)</span>
           </h2>
 
-          {driver && (
-            <button 
-              onClick={() => logout('driver')}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                color: '#E11D48',
-                fontSize: '14px',
-                fontWeight: '600'
-              }}
-            >
-              <LogOut size={16} />
-              <span>Logout</span>
-            </button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {driver && <NotificationCenter />}
+            {driver && (
+              <button
+                onClick={() => navigate('/profile')}
+                title="My Profile"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(19,136,8,0.15) 0%, rgba(9,87,3,0.08) 100%)',
+                  border: '1px solid rgba(19,136,8,0.25)',
+                  borderRadius: '12px',
+                  padding: '8px 14px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: 'var(--emerald)',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  fontFamily: 'var(--font-display)',
+                }}
+              >
+                <User size={15} />
+                <span style={{ maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {driver.name.split(' ')[0]}
+                </span>
+              </button>
+            )}
+            {driver && (
+              <button 
+                onClick={() => { logout('driver'); navigate('/'); }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: '#E11D48',
+                  fontSize: '14px',
+                  fontWeight: '600'
+                }}
+              >
+                <LogOut size={16} />
+              </button>
+            )}
+          </div>
         </nav>
 
         {/* Auth Block */}
