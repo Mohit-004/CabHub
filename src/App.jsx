@@ -4,10 +4,12 @@ import { AnimatePresence } from 'framer-motion';
 import { SimulationProvider } from './context/SimulationContext';
 import { ToastProvider } from './components/ToastNotification';
 import SplashScreen from './components/SplashScreen';
-import PortalSelector from './pages/PortalSelector';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 import PassengerPortal from './pages/PassengerPortal';
 import DriverPortal from './pages/DriverPortal';
 import AdminPortal from './pages/AdminPortal';
+import ProfilePage from './pages/ProfilePage';
 import NotFound from './pages/NotFound';
 
 
@@ -32,10 +34,12 @@ function App() {
         {!isLoading && (
           <Router>
             <Routes>
-              <Route path="/" element={<PortalSelector />} />
+              <Route path="/" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
               <Route path="/passenger" element={<PassengerPortal />} />
               <Route path="/driver" element={<DriverPortal />} />
               <Route path="/admin" element={<AdminPortal />} />
+              <Route path="/profile" element={<ProfilePage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Router>
