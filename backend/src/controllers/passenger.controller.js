@@ -3,6 +3,7 @@ const DriverDetail = require('../models/DriverDetail.model');
 const Ride = require('../models/Ride.model');
 const Coupon = require('../models/Coupon.model');
 const Notification = require('../models/Notification.model');
+const Complaint = require('../models/Complaint.model');
 
 // Helper to seed notification
 const addNotification = async (userId, message, type = 'info') => {
@@ -152,6 +153,7 @@ const requestRide = async (req, res) => {
     }
 
     const finalFare = Math.max(0, fare - discount);
+    const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
 
     const newRide = await Ride.create({
       passengerId: req.user._id,
@@ -166,10 +168,11 @@ const requestRide = async (req, res) => {
       duration,
       driverLat: pickup.lat - 0.012,
       driverLng: pickup.lng - 0.012,
-      messages: [{ sender: 'system', text: `Searching for ${vehicleType} drivers near you...` }]
+      otp: generatedOtp,
+      messages: [{ sender: 'system', text: `Searching for ${vehicleType} drivers near you... OTP for ride: ${generatedOtp}` }]
     });
 
-    await addNotification(req.user._id.toString(), `Searching for a ${vehicleType} ride 🔍`, 'info');
+    await addNotification(req.user._id.toString(), `Searching for a ${vehicleType} ride 🔍 (OTP: ${generatedOtp})`, 'info');
 
     res.status(201).json({
       success: true,
@@ -300,21 +303,92 @@ const rateRide = async (req, res) => {
   }
 };
 
-// @desc    Get Passenger Ride History
-// @route   GET /api/passenger/ride/history
+// @desc    Send In-Ride Chat Message
+// @route   POST /api/passenger/ride/message
 // @access  Private (Passenger only)
-const getRideHistory = async (req, res) => {
+const sendRideMessage = async (req, res) => {
+  const { rideId, text } = req.body;
   try {
-    const history = await Ride.find({ passengerId: req.user._id })
-      .populate('driverId', 'name phone profilePhoto')
+    const ride = await Ride.findById(rideId);
+    if (!ride) {
+      return res.status(404).json({ success: false, message: 'Ride not found' });
+    }
+    if (ride.passengerId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+
+    ride.messages.push({ sender: 'passenger', text });
+    await ride.save();
+
+    res.json({ success: true, messages: ride.messages });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error sending message' });
+  }
+};
+
+// @desc    Trigger SOS Emergency Alert
+// @route   POST /api/passenger/ride/sos
+// @access  Private (Passenger only)
+const triggerSOS = async (req, res) => {
+  const { rideId } = req.body;
+  try {
+    const ride = await Ride.findById(rideId);
+    if (!ride) {
+      return res.status(404).json({ success: false, message: 'Ride not found' });
+    }
+    if (ride.passengerId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+
+    ride.sosTriggered = true;
+    ride.messages.push({ sender: 'system', text: '🚨 SOS Emergency Triggered! Support & Emergency dispatch notified.' });
+    await ride.save();
+
+    await addNotification('all', `🚨 EMERGENCY SOS triggered by passenger ${req.user.name} for Ride #${ride._id}`, 'error');
+
+    res.json({ success: true, message: 'Emergency SOS activated. Support has been notified.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error triggering SOS' });
+  }
+};
+
+// @desc    File a new Complaint
+// @route   POST /api/passenger/complaints
+// @access  Private (Passenger only)
+const fileComplaint = async (req, res) => {
+  const { rideId, description } = req.body;
+  try {
+    const ride = await Ride.findById(rideId);
+    if (!ride) {
+      return res.status(404).json({ success: false, message: 'Ride not found' });
+    }
+
+    const complaint = await Complaint.create({
+      userId: req.user._id,
+      rideId,
+      description
+    });
+
+    await addNotification('all', `New complaint filed by ${req.user.name} for ride #${rideId}`, 'warning');
+
+    res.status(201).json({ success: true, complaint, message: 'Complaint submitted successfully.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error filing complaint' });
+  }
+};
+
+// @desc    Get Passenger Complaints
+// @route   GET /api/passenger/complaints
+// @access  Private (Passenger only)
+const getComplaints = async (req, res) => {
+  try {
+    const complaints = await Complaint.find({ userId: req.user._id })
+      .populate('rideId')
       .sort({ createdAt: -1 });
 
-    res.json({
-      success: true,
-      history
-    });
+    res.json({ success: true, complaints });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error retrieving ride history' });
+    res.status(500).json({ success: false, message: 'Server error fetching complaints' });
   }
 };
 
@@ -326,5 +400,9 @@ module.exports = {
   getActiveRide,
   cancelRide,
   rateRide,
-  getRideHistory
+  getRideHistory,
+  sendRideMessage,
+  triggerSOS,
+  fileComplaint,
+  getComplaints
 };

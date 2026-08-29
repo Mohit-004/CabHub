@@ -6,7 +6,11 @@ const {
   updateRideStatus,
   getEarnings,
   getTrips,
-  updateVehicle
+  updateVehicle,
+  updateLocation,
+  sendRideMessage,
+  fileComplaint,
+  getComplaints
 } = require('../controllers/driver.controller');
 const { protect, authorize } = require('../middlewares/auth.middleware');
 
@@ -22,5 +26,9 @@ router.post('/ride/status', updateRideStatus);
 router.get('/earnings', getEarnings);
 router.get('/trips', getTrips);
 router.put('/vehicle', updateVehicle);
+router.post('/location', updateLocation);
+router.post('/ride/message', sendRideMessage);
+router.post('/complaint', fileComplaint);
+router.get('/complaints', getComplaints);
 
 module.exports = router;
