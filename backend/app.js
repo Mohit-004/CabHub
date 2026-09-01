@@ -19,16 +19,17 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static upload folders if necessary (for driver verification docs)
 app.use('/uploads', express.static('uploads'));
 
-// Routes
 const authRoutes = require('./src/routes/auth.routes');
 const passengerRoutes = require('./src/routes/passenger.routes');
 const driverRoutes = require('./src/routes/driver.routes');
 const adminRoutes = require('./src/routes/admin.routes');
+const notificationRoutes = require('./src/routes/notification.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/passenger', passengerRoutes);
 app.use('/api/driver', driverRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/', (req, res) => {
   res.json({
