@@ -109,6 +109,10 @@ const rideSchema = new mongoose.Schema({
   sosTriggered: {
     type: Boolean,
     default: false
+  },
+  otp: {
+    type: String,
+    default: '1234'
   }
 }, {
   timestamps: true
