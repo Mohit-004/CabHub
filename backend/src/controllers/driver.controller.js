@@ -2,6 +2,7 @@ const User = require('../models/User.model');
 const DriverDetail = require('../models/DriverDetail.model');
 const Ride = require('../models/Ride.model');
 const Notification = require('../models/Notification.model');
+const Complaint = require('../models/Complaint.model');
 
 // Helper to seed notification
 const addNotification = async (userId, message, type = 'info') => {
@@ -132,7 +133,7 @@ const acceptRide = async (req, res) => {
 // @route   POST /api/driver/ride/status
 // @access  Private (Driver only)
 const updateRideStatus = async (req, res) => {
-  const { rideId, status } = req.body;
+  const { rideId, status, otp } = req.body;
 
   try {
     const ride = await Ride.findById(rideId);
@@ -147,6 +148,9 @@ const updateRideStatus = async (req, res) => {
     ride.status = status;
 
     if (status === 'started') {
+      if (ride.otp && otp !== ride.otp) {
+        return res.status(400).json({ success: false, message: 'Invalid OTP. Please ask the passenger for the correct 4-digit code.' });
+      }
       ride.startTime = new Date();
       ride.messages.push({ sender: 'system', text: 'Ride started. OTP verified. Enjoy your journey!' });
       await addNotification(ride.passengerId.toString(), 'Your ride has started! Enjoy the trip 🛣️', 'info');
@@ -249,6 +253,107 @@ const updateVehicle = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error updating vehicle' });
   }
 };
+// @desc    Update Driver Real-time GPS Location
+// @route   POST /api/driver/location
+// @access  Private (Driver only)
+const updateLocation = async (req, res) => {
+  const { latitude, longitude } = req.body;
+  try {
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+    if (isNaN(lat) || isNaN(lng)) {
+      return res.status(400).json({ success: false, message: 'Invalid coordinates provided' });
+    }
+
+    const driverDetail = await DriverDetail.findOne({ userId: req.user._id });
+    if (!driverDetail) {
+      return res.status(404).json({ success: false, message: 'Driver profile not found' });
+    }
+
+    driverDetail.latitude = lat;
+    driverDetail.longitude = lng;
+    await driverDetail.save();
+
+    // If driver is currently on an active ride, update ride driverLat / driverLng
+    const activeRide = await Ride.findOne({
+      driverId: req.user._id,
+      status: { $in: ['accepted', 'arriving', 'arrived', 'started'] }
+    });
+
+    if (activeRide) {
+      activeRide.driverLat = lat;
+      activeRide.driverLng = lng;
+      await activeRide.save();
+    }
+
+    res.json({ success: true, latitude: lat, longitude: lng });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error updating location' });
+  }
+};
+
+// @desc    Send Driver In-Ride Chat Message
+// @route   POST /api/driver/ride/message
+// @access  Private (Driver only)
+const sendRideMessage = async (req, res) => {
+  const { rideId, text } = req.body;
+  try {
+    const ride = await Ride.findById(rideId);
+    if (!ride) {
+      return res.status(404).json({ success: false, message: 'Ride not found' });
+    }
+    if (ride.driverId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+
+    ride.messages.push({ sender: 'driver', text });
+    await ride.save();
+
+    res.json({ success: true, messages: ride.messages });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error sending message' });
+  }
+};
+
+// @desc    File a Driver Complaint
+// @route   POST /api/driver/complaints
+// @access  Private (Driver only)
+const fileComplaint = async (req, res) => {
+  const { rideId, description } = req.body;
+  try {
+    const ride = await Ride.findById(rideId);
+    if (!ride) {
+      return res.status(404).json({ success: false, message: 'Ride not found' });
+    }
+
+    const complaint = await Complaint.create({
+      userId: req.user._id,
+      rideId,
+      description
+    });
+
+    await addNotification('all', `Driver complaint filed by ${req.user.name} for ride #${rideId}`, 'warning');
+
+    res.status(201).json({ success: true, complaint, message: 'Complaint filed successfully.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error filing complaint' });
+  }
+};
+
+// @desc    Get Driver Complaints
+// @route   GET /api/driver/complaints
+// @access  Private (Driver only)
+const getComplaints = async (req, res) => {
+  try {
+    const complaints = await Complaint.find({ userId: req.user._id })
+      .populate('rideId')
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, complaints });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error fetching complaints' });
+  }
+};
 
 module.exports = {
   getDashboard,
@@ -257,5 +362,9 @@ module.exports = {
   updateRideStatus,
   getEarnings,
   getTrips,
-  updateVehicle
+  updateVehicle,
+  updateLocation,
+  sendRideMessage,
+  fileComplaint,
+  getComplaints
 };
