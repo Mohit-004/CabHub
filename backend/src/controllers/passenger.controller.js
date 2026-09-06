@@ -4,6 +4,7 @@ const Ride = require('../models/Ride.model');
 const Coupon = require('../models/Coupon.model');
 const Notification = require('../models/Notification.model');
 const Complaint = require('../models/Complaint.model');
+const SystemSetting = require('../models/SystemSetting.model');
 
 // Helper to seed notification
 const addNotification = async (userId, message, type = 'info') => {
@@ -392,6 +393,70 @@ const getComplaints = async (req, res) => {
   }
 };
 
+// @desc    Estimate Fare for Ride Calculation
+// @route   POST /api/passenger/ride/estimate
+// @access  Private (Passenger only)
+const estimateFare = async (req, res) => {
+  const { distance, duration, vehicleType, promoCode } = req.body;
+
+  try {
+    const dist = parseFloat(distance) || 0;
+    const dur = parseFloat(duration) || 0;
+
+    // Fetch rates from DB or use defaults
+    const baseFareSetting = await SystemSetting.findOne({ key: 'base_fare' });
+    const perKmRateSetting = await SystemSetting.findOne({ key: 'per_km_rate' });
+    const surgeMultiplierSetting = await SystemSetting.findOne({ key: 'surge_multiplier' });
+
+    const baseFare = baseFareSetting ? Number(baseFareSetting.value) : 50;
+    const perKmRate = perKmRateSetting ? Number(perKmRateSetting.value) : 15;
+    const surgeMultiplier = surgeMultiplierSetting ? Number(surgeMultiplierSetting.value) : 1.0;
+
+    // Vehicle multipliers
+    const vehicleMultipliers = {
+      'Mini': 1.0,
+      'Sedan': 1.2,
+      'SUV': 1.5,
+      'Auto': 0.8,
+      'Bike': 0.5
+    };
+    const multiplier = vehicleMultipliers[vehicleType] || 1.0;
+
+    // Calculate raw fare
+    const calculatedFare = Math.round((baseFare + (dist * perKmRate) + (dur * 2)) * multiplier * surgeMultiplier);
+
+    let discount = 0;
+    if (promoCode) {
+      const coupon = await Coupon.findOne({ code: promoCode, active: true });
+      if (coupon) {
+        if (coupon.discountType === 'fixed') {
+          discount = coupon.value;
+        } else {
+          discount = Math.min(coupon.maxDiscount, (calculatedFare * coupon.value) / 100);
+        }
+      }
+    }
+
+    const finalFare = Math.max(0, calculatedFare - discount);
+
+    res.json({
+      success: true,
+      estimate: {
+        originalFare: calculatedFare,
+        fare: finalFare,
+        discount,
+        distance: dist,
+        duration: dur,
+        vehicleType,
+        promoCode: promoCode || ''
+      }
+    });
+  } catch (error) {
+    console.error('Estimate fare error:', error);
+    res.status(500).json({ success: false, message: 'Server error estimating fare' });
+  }
+};
+
 module.exports = {
   getDashboard,
   updateProfile,
@@ -404,5 +469,6 @@ module.exports = {
   sendRideMessage,
   triggerSOS,
   fileComplaint,
-  getComplaints
+  getComplaints,
+  estimateFare
 };

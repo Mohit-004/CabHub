@@ -353,6 +353,41 @@ const getComplaints = async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error fetching complaints' });
   }
+// @desc    Upload Driver Documents
+// @route   POST /api/driver/documents
+// @access  Private (Driver only)
+const uploadDocuments = async (req, res) => {
+  try {
+    const driverDetail = await DriverDetail.findOne({ userId: req.user._id });
+    if (!driverDetail) {
+      return res.status(404).json({ success: false, message: 'Driver profile not found' });
+    }
+
+    if (!req.files || Object.keys(req.files).length === 0) {
+      return res.status(400).json({ success: false, message: 'No document files provided for upload' });
+    }
+
+    const docFields = ['drivingLicense', 'aadhaarCard', 'panCard', 'vehicleRC', 'insurance', 'pollutionCertificate', 'vehiclePhoto', 'selfieVerification'];
+
+    docFields.forEach(field => {
+      if (req.files[field] && req.files[field][0]) {
+        driverDetail.documents[field] = `/uploads/documents/${req.files[field][0].filename}`;
+      }
+    });
+
+    driverDetail.verificationStatus = 'pending'; // Reset to pending for admin re-verification
+    await driverDetail.save();
+
+    res.json({
+      success: true,
+      message: 'Verification documents uploaded successfully. Awaiting admin approval.',
+      documents: driverDetail.documents,
+      verificationStatus: driverDetail.verificationStatus
+    });
+  } catch (error) {
+    console.error('Error uploading documents:', error);
+    res.status(500).json({ success: false, message: 'Server error uploading verification documents' });
+  }
 };
 
 module.exports = {
@@ -366,5 +401,6 @@ module.exports = {
   updateLocation,
   sendRideMessage,
   fileComplaint,
-  getComplaints
+  getComplaints,
+  uploadDocuments
 };

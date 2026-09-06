@@ -11,7 +11,8 @@ const {
   sendRideMessage,
   triggerSOS,
   fileComplaint,
-  getComplaints
+  getComplaints,
+  estimateFare
 } = require('../controllers/passenger.controller');
 const { protect, authorize } = require('../middlewares/auth.middleware');
 
@@ -23,6 +24,7 @@ router.use(authorize('passenger'));
 router.get('/dashboard', getDashboard);
 router.put('/profile', updateProfile);
 router.post('/wallet/recharge', rechargeWallet);
+router.post('/ride/estimate', estimateFare);
 router.post('/ride/request', requestRide);
 router.get('/ride/active', getActiveRide);
 router.post('/ride/cancel', cancelRide);
