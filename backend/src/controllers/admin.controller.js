@@ -146,6 +146,22 @@ const getPendingDrivers = async (req, res) => {
   }
 };
 
+// @desc    Get Driver Details & Documents
+// @route   GET /api/admin/drivers/:id
+// @access  Private (Admin only)
+const getDriverDetails = async (req, res) => {
+  try {
+    const driverDetail = await DriverDetail.findOne({ userId: req.params.id })
+      .populate('userId', 'name email phone profilePhoto status');
+    if (!driverDetail) {
+      return res.status(404).json({ success: false, message: 'Driver details not found' });
+    }
+    res.json({ success: true, driverDetail });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error retrieving driver details' });
+  }
+};
+
 // @desc    Verify Driver Documents (Approve/Reject)
 // @route   POST /api/admin/drivers/verify
 // @access  Private (Admin only)
@@ -291,6 +307,7 @@ module.exports = {
   getUsers,
   toggleUserStatus,
   getPendingDrivers,
+  getDriverDetails,
   verifyDriver,
   getComplaints,
   resolveComplaint,

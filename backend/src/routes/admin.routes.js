@@ -5,6 +5,7 @@ const {
   getUsers,
   toggleUserStatus,
   getPendingDrivers,
+  getDriverDetails,
   verifyDriver,
   getComplaints,
   resolveComplaint,
@@ -25,6 +26,7 @@ router.get('/dashboard/charts', getCharts);
 router.get('/users', getUsers);
 router.put('/users/:id/status', toggleUserStatus);
 router.get('/drivers/pending', getPendingDrivers);
+router.get('/drivers/:id', getDriverDetails);
 router.post('/drivers/verify', verifyDriver);
 router.get('/complaints', getComplaints);
 router.post('/complaints/resolve', resolveComplaint);
