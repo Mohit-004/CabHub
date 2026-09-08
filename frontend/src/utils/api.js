@@ -201,12 +201,12 @@ export const passengerAPI = {
     }
   },
 
-  estimateFare: async (fareParams) => {
+  estimateFare: async (distance, duration, vehicleType, promoCode) => {
     try {
       const res = await fetch(`${API_BASE}/passenger/ride/estimate`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify(fareParams),
+        body: JSON.stringify({ distance, duration, vehicleType, promoCode }),
       });
       return await handleResponse(res);
     } catch (err) {
@@ -316,7 +316,6 @@ export const driverAPI = {
       const token = localStorage.getItem('cabhub_token');
       const headers = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
-
       const res = await fetch(`${API_BASE}/driver/documents`, {
         method: 'POST',
         headers,
@@ -370,12 +369,12 @@ export const adminAPI = {
     }
   },
 
-  getDriverDetails: async (driverId) => {
+  getDriverDetails: async (id) => {
     try {
-      const res = await fetch(`${API_BASE}/admin/drivers/${driverId}`, { headers: getHeaders() });
+      const res = await fetch(`${API_BASE}/admin/drivers/${id}`, { headers: getHeaders() });
       return await handleResponse(res);
     } catch (err) {
-      return { success: false, message: 'Network error' };
+      return { success: false, message: 'Network error fetching driver details' };
     }
   },
 
