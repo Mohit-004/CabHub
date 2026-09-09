@@ -922,7 +922,7 @@ const PassengerPortal = () => {
                             <span style={{ fontSize: '11px', color: 'var(--emerald)', marginLeft: '6px' }}>(₹{activeRide.discount} off via {activeRide.promoCode})</span>
                           )}
                         </span>
-                        <span style={{ marginLeft: 'auto' }}>OTP: <strong>7241</strong></span>
+                        <span style={{ marginLeft: 'auto' }}>OTP: <strong style={{ fontSize: '16px', letterSpacing: '0.15em', color: 'var(--saffron)' }}>{activeRide.otp || '—'}</strong></span>
                       </div>
                     </div>
                   ) : (

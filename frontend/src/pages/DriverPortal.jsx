@@ -57,12 +57,18 @@ const DriverPortal = () => {
     setChatInput('');
   };
 
-  const handleStartRide = () => {
-    if (otpInput === '7241') {
-      updateRideStatus('started');
-      setOtpInput('');
-      setOtpError(false);
-      addToast('OTP verified! Ride started. Drive safe! 🚗', 'success');
+  const handleStartRide = async () => {
+    const expectedOtp = activeRide?.otp;
+    if (!expectedOtp || otpInput === expectedOtp) {
+      const result = await updateRideStatus('started', otpInput);
+      if (result && result.success === false) {
+        setOtpError(true);
+        addToast(result.message || 'Invalid OTP. Please verify with the customer.', 'error');
+      } else {
+        setOtpInput('');
+        setOtpError(false);
+        addToast('OTP verified! Ride started. Drive safe! 🚗', 'success');
+      }
     } else {
       setOtpError(true);
       addToast('Invalid OTP. Please verify with the customer.', 'error');
@@ -719,7 +725,7 @@ const DriverPortal = () => {
                                   setOtpInput(e.target.value);
                                   setOtpError(false);
                                 }}
-                                placeholder="e.g. 7241"
+                                placeholder="Enter 4-digit OTP"
                                 style={{
                                   width: '100%',
                                   padding: '10px 14px',
@@ -736,7 +742,7 @@ const DriverPortal = () => {
                             </div>
                             {otpError && (
                               <div style={{ color: '#E11D48', fontSize: '11px', fontWeight: '600', textAlign: 'center' }}>
-                                Invalid OTP code! Verify with customer. (Hint: 7241)
+                                Invalid OTP code! Please verify with the passenger.
                               </div>
                             )}
                             <button 

@@ -396,16 +396,26 @@ export const SimulationProvider = ({ children }) => {
   };
 
   // Wallet operations
-  const rechargeWallet = (amount) => {
+  const rechargeWallet = async (amount) => {
     if (!passenger) return { success: false, message: 'Please log in as passenger first' };
     const numAmt = parseFloat(amount);
     if (isNaN(numAmt) || numAmt <= 0) return { success: false, message: 'Invalid recharge amount' };
 
-    let updated;
+    // Try backend API first
+    try {
+      const apiRes = await passengerAPI.rechargeWallet(numAmt);
+      if (apiRes && apiRes.success) {
+        setPassenger(prev => ({ ...prev, walletBalance: apiRes.walletBalance ?? (prev.walletBalance + numAmt) }));
+        addNotification(`Wallet recharged with ₹${numAmt} successfully 💳`, 'success');
+        return { success: true };
+      }
+    } catch (_) { /* fallback */ }
+
+    // Simulation fallback
     setPassenger(prev => {
       if (!prev) return null;
       const newBalance = prev.walletBalance + numAmt;
-      updated = { ...prev, walletBalance: newBalance };
+      const updated = { ...prev, walletBalance: newBalance };
       localStorage.setItem('cabhub_passenger', JSON.stringify(updated));
       return updated;
     });
@@ -414,12 +424,59 @@ export const SimulationProvider = ({ children }) => {
   };
 
   // Ride Operations
-  const requestRide = (pickup, drop, fare, vehicleType, distance, duration, discount = 0, promoCode = '') => {
+  const requestRide = async (pickup, drop, fare, vehicleType, distance, duration, discount = 0, promoCode = '') => {
     if (!passenger) return { success: false, message: 'Please log in as passenger first' };
 
     const originalFare = parseFloat(fare);
     const finalFare = Math.max(0, originalFare - discount);
 
+    // Try backend API first
+    try {
+      const ridePayload = {
+        pickup: { name: pickup.name, lat: pickup.lat, lng: pickup.lng },
+        drop: { name: drop.name, lat: drop.lat, lng: drop.lng },
+        fare: originalFare,
+        vehicleType,
+        distance,
+        duration,
+        promoCode: promoCode || ''
+      };
+      const apiRes = await passengerAPI.requestRide(ridePayload);
+      if (apiRes && apiRes.success && apiRes.ride) {
+        const backendRide = apiRes.ride;
+        const mappedRide = {
+          id: backendRide._id,
+          _id: backendRide._id,
+          passenger: { id: passenger.id || passenger._id, name: passenger.name, phone: passenger.phone },
+          pickup: backendRide.pickup,
+          drop: backendRide.drop,
+          originalFare: backendRide.originalFare,
+          fare: backendRide.fare,
+          discount: backendRide.discount || 0,
+          promoCode: backendRide.promoCode || '',
+          vehicleType: backendRide.vehicleType,
+          distance: backendRide.distance,
+          duration: backendRide.duration,
+          status: backendRide.status,
+          otp: backendRide.otp,
+          createdAt: backendRide.createdAt,
+          driver: null,
+          driverLat: pickup.lat - 0.012,
+          driverLng: pickup.lng - 0.012,
+          rated: false
+        };
+        setActiveRide(mappedRide);
+        setMessages([{ id: 'msg_sys_1', sender: 'system', text: `Searching for ${vehicleType} near you...`, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+        setSosAlert(false);
+        playRequestChime();
+        startIncomingRequestRing();
+        addNotification(`Ride requested! OTP: ${backendRide.otp || '****'} 🔍`, 'info');
+        return { success: true, ride: mappedRide };
+      }
+    } catch (_) { console.warn('Backend ride request offline, falling back to simulation'); }
+
+    // Simulation fallback
+    const generatedOtp = String(Math.floor(1000 + Math.random() * 9000));
     const newRide = {
       id: 'ride_' + Math.random().toString(36).substring(2, 9),
       passenger: {
@@ -444,6 +501,7 @@ export const SimulationProvider = ({ children }) => {
       vehicleType,
       distance,
       duration,
+      otp: generatedOtp,
       status: 'requested',
       createdAt: new Date().toISOString(),
       driver: null,
@@ -463,9 +521,36 @@ export const SimulationProvider = ({ children }) => {
     return { success: true, ride: newRide };
   };
 
-  const acceptRideByDriver = (driverProfile) => {
-    if (!activeRide) return { success: false, message: 'No active ride request found' };
+  const acceptRideByDriver = async (driverProfile, rideId) => {
+    if (!activeRide && !rideId) return { success: false, message: 'No active ride request found' };
 
+    const targetRideId = rideId || activeRide?.id || activeRide?._id;
+
+    // Try backend API first
+    try {
+      const apiRes = await driverAPI.acceptRide(targetRideId);
+      if (apiRes && apiRes.success) {
+        const updatedRide = {
+          ...activeRide,
+          status: 'accepted',
+          driver: {
+            id: driverProfile.id,
+            name: driverProfile.name,
+            phone: driverProfile.phone,
+            vehicle: driverProfile.vehicle,
+            rating: driverProfile.rating
+          }
+        };
+        setActiveRide(updatedRide);
+        stopIncomingRequestRing();
+        setDriver(prev => ({ ...prev, status: 'on-ride' }));
+        sendMessage('system', `Pilot ${driverProfile.name} is on the way!`);
+        addNotification(`Ride accepted! Head to pickup location. 🚗`, 'success');
+        return { success: true, ride: updatedRide };
+      }
+    } catch (_) { console.warn('Backend accept ride offline, falling back'); }
+
+    // Simulation fallback
     const updatedRide = {
       ...activeRide,
       status: 'accepted',
@@ -477,23 +562,50 @@ export const SimulationProvider = ({ children }) => {
         rating: driverProfile.rating
       }
     };
-
     setActiveRide(updatedRide);
     stopIncomingRequestRing();
-
     if (driver && driver.id === driverProfile.id) {
       setDriver(prev => ({ ...prev, status: 'on-ride' }));
     }
-
     sendMessage('system', `Pilot ${driverProfile.name} is on the way!`);
     addNotification(`Driver ${driverProfile.name} accepted your ride! 🚗`, 'success');
-
     return { success: true, ride: updatedRide };
   };
 
-  const updateRideStatus = (newStatus) => {
+  const updateRideStatus = async (newStatus, otpCode) => {
     if (!activeRide) return { success: false, message: 'No active ride found' };
 
+    const rideId = activeRide._id || activeRide.id;
+
+    // Try backend API first
+    try {
+      const apiRes = await driverAPI.updateRideStatus(rideId, newStatus, otpCode);
+      if (apiRes && apiRes.success) {
+        let updatedRide = { ...activeRide, status: newStatus };
+        if (newStatus === 'started') {
+          updatedRide.startTime = new Date().toISOString();
+          sendMessage('system', `Ride started. OTP verified. Drive safe!`);
+          addNotification('Your ride has started! Enjoy your journey 🛣️', 'info');
+        }
+        if (newStatus === 'completed') {
+          updatedRide.endTime = new Date().toISOString();
+          setRideHistory(prev => [updatedRide, ...prev]);
+          setActiveRide(null);
+          setMessages([]);
+          setSosAlert(false);
+          setDriver(prev => ({ ...prev, status: 'active' }));
+          playSuccessChime();
+          addNotification(`Ride completed! ₹${activeRide.fare} earned. 🏁`, 'success');
+          return { success: true };
+        }
+        setActiveRide(updatedRide);
+        return { success: true, ride: updatedRide };
+      } else {
+        return { success: false, message: apiRes?.message || 'Status update failed' };
+      }
+    } catch (_) { console.warn('Backend updateRideStatus offline, falling back'); }
+
+    // Simulation fallback
     let updatedRide = { ...activeRide, status: newStatus };
 
     if (newStatus === 'started') {
@@ -505,7 +617,7 @@ export const SimulationProvider = ({ children }) => {
     if (newStatus === 'completed') {
       updatedRide.endTime = new Date().toISOString();
 
-      if (passenger && activeRide.passenger.id === passenger.id) {
+      if (passenger && activeRide.passenger && activeRide.passenger.id === passenger.id) {
         setPassenger(prev => ({
           ...prev,
           walletBalance: Math.max(0, prev.walletBalance - activeRide.fare)
@@ -534,8 +646,13 @@ export const SimulationProvider = ({ children }) => {
     return { success: true, ride: updatedRide };
   };
 
-  const cancelRide = () => {
+  const cancelRide = async () => {
     if (!activeRide) return { success: false };
+
+    // Try backend API first
+    try {
+      await passengerAPI.cancelRide();
+    } catch (_) { /* fallback */ }
 
     const cancelledRide = {
       ...activeRide,
@@ -557,9 +674,21 @@ export const SimulationProvider = ({ children }) => {
     return { success: true };
   };
 
-  const toggleDriverDuty = () => {
+  const toggleDriverDuty = async () => {
     if (!driver) return;
-    const newStatus = driver.status === 'inactive' ? 'active' : 'inactive';
+    // Try backend API first
+    let newStatus;
+    try {
+      const apiRes = await driverAPI.toggleDuty();
+      if (apiRes && apiRes.success) {
+        newStatus = apiRes.dutyStatus;
+      }
+    } catch (_) { /* fallback */ }
+
+    if (!newStatus) {
+      newStatus = driver.status === 'inactive' ? 'active' : 'inactive';
+    }
+
     setDriver(prev => ({ ...prev, status: newStatus }));
     addNotification(
       newStatus === 'active' ? 'You are now Online! Awaiting dispatch 📡' : 'You went Offline.',
