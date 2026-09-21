@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimulation } from '../context/SimulationContext';
+import { driverAPI } from '../utils/api';
 import MapComponent from '../components/MapComponent';
 import NotificationCenter from '../components/NotificationCenter';
 import { useToast } from '../components/ToastNotification';
@@ -41,6 +42,45 @@ const DriverPortal = () => {
   // OTP states
   const [otpInput, setOtpInput] = useState('');
   const [otpError, setOtpError] = useState(false);
+
+  // GPS location pinging — sends driver location to backend every 10s during active ride
+  const locationIntervalRef = useRef(null);
+  useEffect(() => {
+    const isOnRide = activeRide && (activeRide.status === 'accepted' || activeRide.status === 'arriving' || activeRide.status === 'started');
+    if (!isOnRide || !driver) {
+      if (locationIntervalRef.current) {
+        clearInterval(locationIntervalRef.current);
+        locationIntervalRef.current = null;
+      }
+      return;
+    }
+
+    const pingLocation = () => {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          driverAPI.updateLocation(pos.coords.latitude, pos.coords.longitude).catch(() => {});
+        },
+        () => {
+          // If geolocation fails, use the simulated activeRide driver coords
+          if (activeRide?.driverLat && activeRide?.driverLng) {
+            driverAPI.updateLocation(activeRide.driverLat, activeRide.driverLng).catch(() => {});
+          }
+        },
+        { timeout: 5000, maximumAge: 10000 }
+      );
+    };
+
+    pingLocation(); // ping immediately
+    locationIntervalRef.current = setInterval(pingLocation, 10000); // then every 10s
+
+    return () => {
+      if (locationIntervalRef.current) {
+        clearInterval(locationIntervalRef.current);
+        locationIntervalRef.current = null;
+      }
+    };
+  }, [activeRide?.status, driver]);
 
   // Chat local state
   const [chatInput, setChatInput] = useState('');

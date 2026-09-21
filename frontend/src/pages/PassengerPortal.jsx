@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimulation, INDIAN_LANDMARKS, PREDEFINED_PROMOS } from '../context/SimulationContext';
+import { passengerAPI } from '../utils/api';
 import MapComponent from '../components/MapComponent';
 import RideReceipt from '../components/RideReceipt';
 import RatingModal from '../components/RatingModal';
@@ -78,6 +79,36 @@ const PassengerPortal = () => {
   const [appliedPromo, setAppliedPromo] = useState(null);
   const [promoError, setPromoError] = useState('');
 
+  // Backend fare estimates
+  const [backendFares, setBackendFares] = useState(null);
+  const fareDebounceRef = useRef(null);
+
+  // Fetch backend fare estimates whenever pickup/drop changes
+  useEffect(() => {
+    if (fareDebounceRef.current) clearTimeout(fareDebounceRef.current);
+    fareDebounceRef.current = setTimeout(async () => {
+      try {
+        const dist = rideStats.distance;
+        const dur = rideStats.duration;
+        const [miniRes, sedanRes, suvRes] = await Promise.allSettled([
+          passengerAPI.estimateFare(dist, dur, 'Mini', ''),
+          passengerAPI.estimateFare(dist, dur, 'Sedan', ''),
+          passengerAPI.estimateFare(dist, dur, 'SUV', '')
+        ]);
+        const getVal = (res, fallback) => (res.status === 'fulfilled' && res.value?.fare) ? Math.round(res.value.fare) : fallback;
+        const dist2 = rideStats.distance;
+        setBackendFares({
+          Mini: getVal(miniRes, Math.round(dist2 * 12 + 40)),
+          Sedan: getVal(sedanRes, Math.round(dist2 * 18 + 60)),
+          SUV: getVal(suvRes, Math.round(dist2 * 28 + 100))
+        });
+      } catch (_) {
+        setBackendFares(null);
+      }
+    }, 600);
+    return () => clearTimeout(fareDebounceRef.current);
+  }, [rideStats.distance, rideStats.duration]);
+
   const calculateDiscount = (fareVal, promo) => {
     if (!promo) return 0;
     if (promo.discountType === 'fixed') {
@@ -89,18 +120,40 @@ const PassengerPortal = () => {
     return 0;
   };
 
-  const handleApplyPromo = () => {
+  const handleApplyPromo = async () => {
     if (!promoCodeInput.trim()) return;
-    const promo = PREDEFINED_PROMOS.find(p => p.code === promoCodeInput.trim().toUpperCase());
-    if (promo) {
-      setAppliedPromo(promo);
+    const code = promoCodeInput.trim().toUpperCase();
+
+    // 1. Try local predefined promos first
+    const localPromo = PREDEFINED_PROMOS.find(p => p.code === code);
+    if (localPromo) {
+      setAppliedPromo(localPromo);
       setPromoCodeInput('');
       setPromoError('');
-      addToast(`Promo code ${promo.code} applied!`, 'success');
-    } else {
-      setPromoError('Invalid promo code. Try CABHUB50.');
-      addToast('Invalid promo code!', 'error');
+      addToast(`Promo code ${localPromo.code} applied! 🎉`, 'success');
+      return;
     }
+
+    // 2. Try backend coupon validation
+    try {
+      const res = await passengerAPI.estimateFare(rideStats.distance, rideStats.duration, selectedTier, code);
+      if (res && res.success && res.couponApplied) {
+        const backendPromo = {
+          code,
+          discountType: 'fixed',
+          value: res.discount || 0,
+          desc: `₹${res.discount} off via ${code}`
+        };
+        setAppliedPromo(backendPromo);
+        setPromoCodeInput('');
+        setPromoError('');
+        addToast(`Promo code ${code} applied! Saved ₹${res.discount} 🎉`, 'success');
+        return;
+      }
+    } catch (_) { /* fallback */ }
+
+    setPromoError('Invalid promo code. Try CABHUB50 or WELCOME10.');
+    addToast('Invalid promo code!', 'error');
   };
 
   const handleRechargeSubmit = () => {
@@ -139,13 +192,15 @@ const PassengerPortal = () => {
   }, [pickupIndex, dropIndex]);
 
   const fareTiers = useMemo(() => {
+    // Prefer backend fare if available, otherwise compute locally
+    if (backendFares) return backendFares;
     const dist = rideStats.distance;
     return {
       Mini: Math.round(dist * 12 + 40),
       Sedan: Math.round(dist * 18 + 60),
       SUV: Math.round(dist * 28 + 100)
     };
-  }, [rideStats.distance]);
+  }, [rideStats.distance, backendFares]);
 
   // Auth handlers
   const handleAuthSubmit = (e) => {
