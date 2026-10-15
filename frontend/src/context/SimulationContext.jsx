@@ -187,7 +187,24 @@ export const SimulationProvider = ({ children }) => {
     try {
       const apiRes = await authAPI.login(credentials.email, credentials.password, role);
       if (apiRes && apiRes.success && apiRes.user) {
-        if (role === 'passenger') setPassenger(apiRes.user);
+        if (role === 'passenger') {
+          setPassenger(apiRes.user);
+          // Load ride history from backend
+          try {
+            const dashRes = await passengerAPI.getDashboard();
+            if (dashRes && dashRes.rideHistory) {
+              setRideHistory(dashRes.rideHistory.map(r => ({
+                ...r,
+                id: r._id || r.id,
+                passenger: r.passenger || { name: apiRes.user.name },
+                rated: r.passengerRating != null
+              })));
+            }
+            if (dashRes && dashRes.activeRide) {
+              setActiveRide({ ...dashRes.activeRide, id: dashRes.activeRide._id });
+            }
+          } catch (_) { /* ignore */ }
+        }
         if (role === 'driver') setDriver(apiRes.user);
         if (role === 'admin') setAdmin(apiRes.user);
         addNotification(`Welcome back, ${apiRes.user.name}! Ready to ride 🚖`, 'success');
@@ -360,9 +377,14 @@ export const SimulationProvider = ({ children }) => {
   };
 
   // Rate driver after ride
-  const rateDriver = (rideId, stars, feedback = '') => {
+  const rateDriver = async (rideId, stars, feedback = '', tip = 0) => {
+    // Try backend API first
+    try {
+      await passengerAPI.rateRide(rideId, stars, feedback, tip);
+    } catch (_) { /* fallback */ }
+
     setRideHistory(prev => prev.map(ride => {
-      if (ride.id === rideId) {
+      if (ride.id === rideId || ride._id === rideId) {
         return { ...ride, passengerRating: stars, passengerFeedback: feedback, rated: true };
       }
       return ride;
@@ -372,23 +394,41 @@ export const SimulationProvider = ({ children }) => {
   };
 
   // Chat messaging actions
-  const sendMessage = (sender, text) => {
-    setMessages(prev => [
-      ...prev,
-      {
-        id: 'msg_' + Math.random().toString(36).substring(2, 9),
-        sender,
-        text,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      }
-    ]);
+  const sendMessage = async (sender, text) => {
+    const newMsg = {
+      id: 'msg_' + Math.random().toString(36).substring(2, 9),
+      sender,
+      text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setMessages(prev => [...prev, newMsg]);
+
+    // Persist to backend (non-blocking)
+    if (activeRide) {
+      const rideId = activeRide._id || activeRide.id;
+      try {
+        if (sender === 'passenger') {
+          passengerAPI.sendRideMessage(rideId, text).catch(() => {});
+        } else if (sender === 'driver') {
+          driverAPI.sendRideMessage(rideId, text).catch(() => {});
+        }
+      } catch (_) { /* silent fail */ }
+    }
   };
 
   // SOS Emergency actions
-  const triggerSOS = () => {
+  const triggerSOS = async () => {
     setSosAlert(true);
     playSirenSound();
     addNotification('⚠️ SOS Emergency triggered! Help is on the way.', 'error');
+
+    // Notify backend (non-blocking)
+    if (activeRide) {
+      const rideId = activeRide._id || activeRide.id;
+      try {
+        passengerAPI.triggerSOS(rideId).catch(() => {});
+      } catch (_) { /* silent */ }
+    }
   };
 
   const clearSOS = () => {
